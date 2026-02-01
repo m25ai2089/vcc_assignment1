@@ -174,14 +174,6 @@ sudo ss -tulpn | grep 8080
 ## Video Demo
 Video link: https://www.youtube.com/watch?v=m_MIbvozs_4
 
-Suggested demo checklist:
-1. Show VirtualBox network settings (NAT + Host-only)
-2. Show both VMs and their IP addresses (ip a)
-3. Ping VM-A ↔ VM-B
-4. Start inventory service on VM-B and test /items
-5. Start gateway service on VM-A and test /proxy-items
-6. Run final end-to-end curl test from host
-
 ---
 
 ## Conclusion
