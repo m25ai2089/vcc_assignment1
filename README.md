@@ -9,46 +9,30 @@
 | Institute | IIT Jodhpur |
 | Date | 01 Feb 2026 |
 
----
-
 ## Objective
-Create and configure two VirtualBox virtual machines (VMs), connect them through a private network, and deploy a simple microservice-based application across the connected VMs.
+Create two VirtualBox VMs, connect them using a private host-only network, and deploy two small C++ HTTP microservices where **VM-A (Gateway)** calls **VM-B (Inventory)**.
 
----
+## VM Roles and IPs
+### VM-A (Gateway Service)
+- IP: `192.168.56.5`
+- Port: `8080`
+- Endpoints:
+  - `GET /health`
+  - `GET /proxy-items`
 
-## Architecture Overview
+### VM-B (Inventory Service)
+- IP: `192.168.56.4`
+- Port: `8081`
+- Endpoints:
+  - `GET /health`
+  - `GET /items`
 
-### VM Roles
-- **VM-A (Gateway Service)**
-  - IP: `192.168.56.5`
-  - Service: `gateway_service`
-  - Port: `8080`
-  - Endpoint: `GET /proxy-items` (calls Inventory service and returns combined JSON)
-
-- **VM-B (Inventory Service)**
-  - IP: `192.168.56.4`
-  - Service: `inventory_service`
-  - Port: `8081`
-  - Endpoint: `GET /items` (returns JSON item list)
-
-### Network Configuration
-Each VM uses:
-- **Adapter 1: NAT** (internet access for installing packages)
-- **Adapter 2: Host-only** (private VM-to-VM communication)
-
-macOS Host (VirtualBox)
-  |
-Host-only Network (192.168.56.0/24)
-  |
-  +-- VM-A 192.168.56.5 :8080  (gateway_service)
-  |        |
-  |        +--> HTTP call to VM-B 192.168.56.4 :8081 (/items)
-  |
-  +-- VM-B 192.168.56.4 :8081  (inventory_service)
-
----
+## Network Setup (per VM)
+- Adapter 1: **NAT** (internet access for apt installs)
+- Adapter 2: **Host-only** (private VM-to-VM communication, `192.168.56.0/24`)
 
 ## Repository Structure
+```
 .
 ├── inventory_service/
 │   ├── main.cpp
@@ -56,125 +40,87 @@ Host-only Network (192.168.56.0/24)
 └── gateway_service/
     ├── main.cpp
     └── httplib.h
+```
 
----
-
-## Prerequisites
-- VirtualBox installed on host machine
-- Two Ubuntu ARM VMs created and connected using:
-  - NAT (Adapter 1)
-  - Host-only (Adapter 2)
-- SSH enabled (recommended)
-- On each VM:
-  - g++ available
-
-Install build tools on each VM:
+## Prerequisites (run on both VMs)
+```bash
 sudo apt update
 sudo apt install -y build-essential
+```
 
----
-
-## Static IP Setup (Host-only)
-- VM-A: 192.168.56.5/24
-- VM-B: 192.168.56.4/24
+## Static IP (Host-only)
+- VM-A: `192.168.56.5/24`
+- VM-B: `192.168.56.4/24`
 
 Note: Static IP ensures the IP does not change after reboot.
 
----
+## Build and Run (No Scripts)
 
-## Build & Run (No Scripts)
-
-### 1) Inventory Service (VM-B) – Port 8081
-
-SSH into VM-B:
+### 1) Inventory Service on VM-B (Port 8081)
+```bash
 ssh ubuntu@192.168.56.4
-
-Go to service directory:
 cd ~/inventory_service
-
-Build:
 g++ -std=c++17 main.cpp -o inventory_service
-
-Run:
 ./inventory_service &
+```
 
-Test (on VM-B):
+Test on VM-B:
+```bash
 curl http://127.0.0.1:8081/health
 curl http://127.0.0.1:8081/items
+```
 
----
-
-### 2) Gateway Service (VM-A) – Port 8080
-
-SSH into VM-A:
+### 2) Gateway Service on VM-A (Port 8080)
+```bash
 ssh ubuntu@192.168.56.5
-
-Go to service directory:
 cd ~/gateway_service
-
-Build:
 g++ -std=c++17 main.cpp -o gateway_service
-
-Run:
 ./gateway_service &
+```
 
-Test (on VM-A):
+Test on VM-A:
+```bash
 curl http://127.0.0.1:8080/health
 curl http://127.0.0.1:8080/proxy-items
+```
 
----
+## Verification (Proof of Communication)
 
-## Verification (Proof of Inter-VM Microservice Communication)
-
-### A) VM-A can reach Inventory service on VM-B (direct call)
-Run on VM-A:
+### A) VM-A reaches Inventory directly
+```bash
 ssh ubuntu@192.168.56.5
 curl http://192.168.56.4:8081/items
+```
 
-### B) Gateway calls Inventory (service-to-service communication)
-Run on VM-A:
+### B) Gateway calls Inventory (service-to-service)
+```bash
 curl http://127.0.0.1:8080/proxy-items
+```
 
-Expected output structure:
-{
-  "service": "gateway",
-  "data": {
-    "service": "inventory",
-    "items": [
-      {"id": 1, "name": "apple"},
-      {"id": 2, "name": "banana"}
-    ]
-  }
-}
+### C) Full chain from host machine (Host → VM-A → VM-B → VM-A)
+```bash
+curl http://192.168.56.5:8080/proxy-items
+```
 
-### C) Full chain test (Host → VM-A → VM-B → VM-A)
-Run from host machine (macOS terminal):
-curl http://192.168.56.4:8080/proxy-items
+## Troubleshooting (quick checks)
 
-If the response is returned successfully, it confirms end-to-end inter-VM microservice communication.
-
----
-
-## Troubleshooting
-
-### Check ports listening (Ubuntu)
-Inventory (VM-B):
+Check ports listening:
+```bash
+# On VM-B
 sudo ss -tulpn | grep 8081
 
-Gateway (VM-A):
+# On VM-A
 sudo ss -tulpn | grep 8080
+```
 
-### Common issue: “inventory unreachable”
-- Ensure inventory service is running on VM-B
-- Ensure inventory service listens on 0.0.0.0:8081 (not only localhost)
-- Ensure gateway uses correct IP 192.168.56.11:8081
-
----
+Check processes:
+```bash
+ps -ef | grep inventory_service
+ps -ef | grep gateway_service
+```
 
 ## Video Demo
-Video link: https://www.youtube.com/watch?v=m_MIbvozs_4
-
----
+https://www.youtube.com/watch?v=m_MIbvozs_4
 
 ## Conclusion
-Two connected VMs were successfully created and configured in VirtualBox. A C++ inventory microservice was deployed on VM-B and a C++ gateway microservice was deployed on VM-A. The gateway service successfully communicated with the inventory service over the private host-only network, demonstrating a working microservice-based deployment across multiple VMs.
+Two connected Ubuntu ARM VMs were created in VirtualBox. Inventory service runs on VM-B (8081) and Gateway service runs on VM-A (8080). Gateway successfully communicates with Inventory over the host-only network, demonstrating a working microservice deployment across two VMs.
